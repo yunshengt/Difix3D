@@ -75,21 +75,35 @@ class CameraPoseInterpolator:
         """
         Interpolate between two rotation matrices using SLERP.
         """
+        # Ensure rotation matrices are proper (orthonormal with det=1)
+        # by using SVD to find the closest proper rotation matrix
+        def ensure_proper_rotation(R):
+            U, _, Vt = np.linalg.svd(R)
+            R_proper = U @ Vt
+            # Ensure det = +1 (not -1 which would be a reflection)
+            if np.linalg.det(R_proper) < 0:
+                U[:, -1] *= -1
+                R_proper = U @ Vt
+            return R_proper
+
+        R1 = ensure_proper_rotation(R1)
+        R2 = ensure_proper_rotation(R2)
+
         q1 = Rotation.from_matrix(R1).as_quat()
         q2 = Rotation.from_matrix(R2).as_quat()
-        
+
         if np.dot(q1, q2) < 0:
             q2 = -q2
-        
+
         # Clamp dot product to avoid invalid values in arccos
         dot_product = np.clip(np.dot(q1, q2), -1.0, 1.0)
         theta = np.arccos(dot_product)
-        
+
         if np.abs(theta) < 1e-6:
             q_interp = (1 - t) * q1 + t * q2
         else:
             q_interp = (np.sin((1-t)*theta) * q1 + np.sin(t*theta) * q2) / np.sin(theta)
-        
+
         q_interp = q_interp / np.linalg.norm(q_interp)
         return Rotation.from_quat(q_interp).as_matrix()
     
